@@ -17,15 +17,11 @@ declare module '@cordisjs/plugin-webui' {
 }
 
 export interface Config {
-  useDualProxy: boolean
-  proxyPoolUrl: string
-  proxyPoolToken: string
+  useLisfoxProxy: boolean
 }
 
 export const Config: z<Config> = z.object({
-  useDualProxy: z.boolean().default(true).description('是否启用双重代理拉取（优先Lisfox，备用官方代理池）'),
-  proxyPoolUrl: z.string().default('http://39.104.58.75:13002/proxy').description('备用代理池 API 的请求地址'),
-  proxyPoolToken: z.string().role('secret').default('+}9Hl6b_(YX4aU12zThDqPn!fG08').description('备用代理池的 X-Api-Token')
+  useLisfoxProxy: z.boolean().default(true).description('是否启用 Lisfox 代理拉取视频信息')
 })
 
 const WBI_ENCRYPT_TABLE = [
@@ -283,7 +279,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     const targetUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${videoId}`
     const start = Date.now()
 
-    if (this.config.useDualProxy) {
+    if (this.config.useLisfoxProxy) {
       try {
         const lisfox = await this.ctx.http.post(LISFOX_PROXY_VIEW_API, { bvid: videoId }, { timeout: 5000 })
         if (lisfox?.response) {
@@ -291,48 +287,29 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
           this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats', videoId, true, Date.now() - start)
           return { status: 'success', data }
         }
-      } catch (e) {
-        // Fallback
-      }
-
-      try {
-        const legacy = await this.ctx.http.post(this.config.proxyPoolUrl, {
-          method: 'GET', url: targetUrl, timeout: 5000
-        }, {
-          headers: { 'X-Api-Token': this.config.proxyPoolToken, 'Content-Type': 'application/json' }
-        })
-        if (legacy.code === 0 && legacy.data) {
-          const data = this.mapBilibiliViewData(legacy.data)
-          this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats', videoId, true, Date.now() - start)
-          return { status: 'success', data }
-        } else if (legacy.code === -404 || legacy.code === 62002 || legacy.code === -403) {
-          // 62002: video invisible, -404: not found
-          this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats', videoId, false, Date.now() - start, `code:${legacy.code}`)
-          return { status: 'not_found', message: `视频不可见或已被删除 (code: ${legacy.code})` }
-        }
-      } catch (e) {
-        return this.handleApiError(e, 'getVideoInfoAndStats', videoId, start)
-      }
-    } else {
-      try {
-        const direct = await this.ctx.http.get(targetUrl, {
-          headers: { Cookie: this.cookie, 'User-Agent': 'Mozilla/5.0' }
-        })
-        if (direct.code === 0 && direct.data) {
-          const data = this.mapBilibiliViewData(direct.data)
-          this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats', videoId, true, Date.now() - start)
-          return { status: 'success', data }
-        } else if (direct.code === -404 || direct.code === 62002 || direct.code === -403) {
-          this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats', videoId, false, Date.now() - start, `code:${direct.code}`)
-          return { status: 'not_found', message: `视频不可见或已被删除 (code: ${direct.code})` }
-        }
-      } catch (e) {
-        return this.handleApiError(e, 'getVideoInfoAndStats', videoId, start)
+        this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(lisfox)', videoId, false, Date.now() - start, 'Lisfox返回数据为空')
+      } catch (e: any) {
+        this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(lisfox)', videoId, false, Date.now() - start, e.message)
       }
     }
-    
-    this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats', videoId, false, Date.now() - start, '代理池和直连均未获取到有效数据')
-    return { status: 'error', message: '所有拉取途径均失败', retryable: true }
+
+    // 直连兜底
+    try {
+      const direct = await this.ctx.http.get(targetUrl, {
+        headers: { Cookie: this.cookie, 'User-Agent': 'Mozilla/5.0' }
+      })
+      if (direct.code === 0 && direct.data) {
+        const data = this.mapBilibiliViewData(direct.data)
+        this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(local)', videoId, true, Date.now() - start)
+        return { status: 'success', data }
+      } else if (direct.code === -404 || direct.code === 62002 || direct.code === -403) {
+        this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(local)', videoId, false, Date.now() - start, `code:${direct.code}`)
+        return { status: 'not_found', message: `视频不可见或已被删除 (code: ${direct.code})` }
+      }
+      throw new Error(`直连请求异常 (code: ${direct.code}, msg: ${direct.message})`)
+    } catch (e) {
+      return this.handleApiError(e, 'getVideoInfoAndStats(local)', videoId, start)
+    }
   }
 
   private mapBilibiliViewData(data: any): { info: GenericVideoInfo; stat: GenericVideoStat } {

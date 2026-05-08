@@ -7,9 +7,7 @@ declare module '@cordisjs/plugin-webui' {
     }
 }
 export interface Config {
-    useDualProxy: boolean;
-    proxyPoolUrl: string;
-    proxyPoolToken: string;
+    useLisfoxProxy: boolean;
 }
 export declare const Config: z<Config>;
 export declare class BilibiliAdapterService extends Service implements LfvsAdapter {

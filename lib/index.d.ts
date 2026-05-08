@@ -38,6 +38,7 @@ export declare class BilibiliAdapterService extends Service implements LfvsAdapt
     private _qrDataUrl?;
     private _mid?;
     private _uname?;
+    private abortController;
     constructor(ctx: Context, config: Config);
     private getStatus;
     private setStatus;

@@ -59,9 +59,18 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
   private _mid?: number
   private _uname?: string
 
+  private abortController: AbortController
+
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'lfvs.bilibili')
+    this.abortController = new AbortController()
     this.cookiePath = path.resolve(process.cwd(), 'data/bilibili-cookie.json')
+
+    ctx.effect(() => {
+      return () => {
+        this.abortController.abort()
+      }
+    })
 
     ctx.inject(['webui'], (ctx) => {
       ctx.webui.addEntry({
@@ -210,6 +219,10 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     this.setStatus('waiting_qr', { qrcode: qrDataUrl })
 
     return new Promise<void>((resolve, reject) => {
+      if (this.abortController.signal.aborted) {
+        return reject(new Error('Context disposed'))
+      }
+
       const interval = setInterval(async () => {
         try {
           const pollResp = await this.ctx.http(QRCODE_POLL_API, { params: { qrcode_key: gen.data.qrcode_key } })
@@ -218,18 +231,28 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
           if (pollData && pollData.code === 0) {
             clearInterval(interval)
             this.saveCookie(pollResp.headers)
+            this.abortController.signal.removeEventListener('abort', abortHandler)
             resolve()
           } else if (pollData && pollData.code === 86038) {
             clearInterval(interval)
             this.setStatus('offline')
+            this.abortController.signal.removeEventListener('abort', abortHandler)
             reject(new Error('二维码已失效'))
           }
         } catch (e) {
           clearInterval(interval)
           this.setStatus('offline')
+          this.abortController.signal.removeEventListener('abort', abortHandler)
           reject(e)
         }
       }, 3000)
+
+      const abortHandler = () => {
+        clearInterval(interval)
+        reject(new Error('Context disposed'))
+      }
+
+      this.abortController.signal.addEventListener('abort', abortHandler)
     })
   }
 

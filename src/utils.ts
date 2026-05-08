@@ -1,3 +1,4 @@
+import {} from '@cordisjs/plugin-logger'
 // src/utils.ts
 
 export function randomSample(population: string[], sampleSize: number): string[] {

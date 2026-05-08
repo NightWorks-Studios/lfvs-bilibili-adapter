@@ -8,7 +8,7 @@ import QRCode from 'qrcode'
 import fs from 'fs'
 import path from 'path'
 import { generateDmParams } from './utils'
-import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from '../../lfvs-core/src/index'
+import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from 'lfvs-core'
 
 declare module '@cordisjs/plugin-webui' {
   interface Events {
@@ -64,7 +64,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
   private _uname?: string
 
   constructor(ctx: Context, public config: Config) {
-    super(ctx, 'lfvs.bilibili', true)
+    super(ctx, 'lfvs.bilibili')
     this.cookiePath = path.resolve(process.cwd(), 'data/bilibili-cookie.json')
 
     ctx.inject(['webui'], (ctx) => {
@@ -72,7 +72,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
         path: 'lfvs-bilibili-adapter',
         base: import.meta.url,
         dev: '../client/index.ts',
-        prod: '../dist/index.js'
+        prod: '../dist/manifest.json'
       })
       ctx.webui.addListener('bilibili/status', () => this.getStatus())
     })

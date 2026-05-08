@@ -1,0 +1,12 @@
+{
+  "client/index.ts": {
+    "file": "index-ilxb12kq.js",
+    "name": "index",
+    "src": "client/index.ts",
+    "isEntry": true
+  },
+  "style.css": {
+    "file": "index-dqxp1q9l.css",
+    "src": "style.css"
+  }
+}

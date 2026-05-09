@@ -147,6 +147,10 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     this.ctx.emit('lfvs/adapter-offline', this.platform, reason)
   }
 
+  protected stop() {
+    this.setOffline('插件卸载')
+  }
+
   public getCredentials() {
     return { cookie: this.cookie, csrf: this.csrf }
   }
@@ -171,7 +175,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     }
   }
 
-  private saveCookie(headers: Record<string, any> | Headers) {
+  private async saveCookie(headers: Record<string, any> | Headers) {
     let setCookie: any
     if (typeof headers.get === 'function') {
       if (typeof (headers as any).getSetCookie === 'function') {
@@ -191,7 +195,11 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     const csrfMatch = this.cookie.match(/bili_jct=([^;]+)/)
     if (csrfMatch) this.csrf = csrfMatch[1]
     
-    fs.writeFileSync(this.cookiePath, JSON.stringify({ cookie: this.cookie, csrf: this.csrf }, null, 2))
+    try {
+      await fs.promises.writeFile(this.cookiePath, JSON.stringify({ cookie: this.cookie, csrf: this.csrf }, null, 2))
+    } catch (e: any) {
+      this.ctx.emit('lfvs/log', 'bilibili-adapter', 'error', `Cookie 文件保存失败: ${e.message}`)
+    }
   }
 
   private loadCookie() {
@@ -203,7 +211,10 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
           this.csrf = data.csrf
           return true
         }
-      } catch (e) {}
+        this.ctx.emit('lfvs/log', 'bilibili-adapter', 'warn', 'Cookie 文件内容不完整，将重新登录')
+      } catch (e: any) {
+        this.ctx.emit('lfvs/log', 'bilibili-adapter', 'warn', `Cookie 文件读取/解析失败: ${e.message}，将重新登录`)
+      }
     }
     return false
   }
@@ -230,7 +241,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
           const pollData = pollJson.data
           if (pollData && pollData.code === 0) {
             clearInterval(interval)
-            this.saveCookie(pollResp.headers)
+            await this.saveCookie(pollResp.headers)
             this.abortController.signal.removeEventListener('abort', abortHandler)
             resolve()
           } else if (pollData && pollData.code === 86038) {
@@ -258,7 +269,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
 
   private async getWbiKeys() {
     const now = new Date()
-    if (!this.wbiKeys || !this.wbiKeysLastUpdate || this.wbiKeysLastUpdate.getDate() !== now.getDate()) {
+    if (!this.wbiKeys || !this.wbiKeysLastUpdate || this.wbiKeysLastUpdate.toDateString() !== now.toDateString()) {
       const nav = await this.ctx.http.get(NAV_API, { headers: { Cookie: this.cookie } })
       if (nav.code === 0 && nav.data?.wbi_img) {
         const img_url = nav.data.wbi_img.img_url as string

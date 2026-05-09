@@ -45,6 +45,7 @@ export declare class BilibiliAdapterService extends Service implements LfvsAdapt
     protected start(): Promise<void>;
     private setOnline;
     private setOffline;
+    protected stop(): void;
     getCredentials(): {
         cookie: string;
         csrf: string;

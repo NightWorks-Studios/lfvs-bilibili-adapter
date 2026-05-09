@@ -47,7 +47,6 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
 
   private cookie: string = ''
   private csrf: string = ''
-  private webId: string = ''
   private wbiKeys: { img_key: string; sub_key: string } | null = null
   private wbiKeysLastUpdate: Date | null = null
   private cookiePath: string
@@ -114,7 +113,6 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     if (this.loadCookie()) {
       const navData = await this.ctx.http.get(NAV_API, { headers: { Cookie: this.cookie } })
       if (navData.code === 0 && navData.data.isLogin) {
-        await this.fetchWebId(navData.data.mid.toString())
         this.setStatus('logged_in', { mid: navData.data.mid, uname: navData.data.uname })
         this.setOnline()
         return
@@ -124,7 +122,6 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     await this.loginByQRCode()
     const navData = await this.ctx.http.get(NAV_API, { headers: { Cookie: this.cookie } })
     if (navData.data?.mid) {
-      await this.fetchWebId(navData.data.mid.toString())
       this.setStatus('logged_in', { mid: navData.data.mid, uname: navData.data.uname })
       this.setOnline()
     } else {
@@ -155,25 +152,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     return { cookie: this.cookie, csrf: this.csrf }
   }
 
-  private async fetchWebId(mid: string) {
-    const spaceUrl = `https://space.bilibili.com/${mid}`
-    try {
-      const html = await this.ctx.http.get(spaceUrl, {
-        headers: { Cookie: this.cookie, 'User-Agent': 'Mozilla/5.0' },
-        responseType: 'text'
-      })
-      const match = html.match(/<script id="__RENDER_DATA__"[^>]*>(.*?)<\/script>/)
-      if (match && match[1]) {
-        const decodedString = decodeURIComponent(match[1])
-        const renderData = JSON.parse(decodedString)
-        if (renderData.access_id) {
-          this.webId = renderData.access_id
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
+
 
   private async saveCookie(headers: Record<string, any> | Headers) {
     let setCookie: any
@@ -377,7 +356,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
       const params = {
         mid, ps: 30, tid: 0, pn: 1, keyword: '', order: 'pubdate',
         platform: 'web', web_location: 1550101, order_avoided: true,
-        ...generateDmParams(), w_webid: this.webId, csrf: this.csrf
+        ...generateDmParams(), csrf: this.csrf
       }
       const query = await this.wbiSign(params)
       const res = await this.ctx.http.get(`https://api.bilibili.com/x/space/wbi/arc/search?${query}`, {

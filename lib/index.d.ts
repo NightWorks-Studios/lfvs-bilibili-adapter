@@ -16,6 +16,9 @@ export declare class BilibiliAdapterService extends Service implements LfvsAdapt
         http: {
             required: boolean;
         };
+        timer: {
+            required: boolean;
+        };
         'lfvs.core': {
             required: boolean;
         };
@@ -29,16 +32,19 @@ export declare class BilibiliAdapterService extends Service implements LfvsAdapt
     platform: string;
     private cookie;
     private csrf;
-    private webId;
     private wbiKeys;
     private wbiKeysLastUpdate;
-    private cookiePath;
-    private isOnline;
     private _status;
-    private _qrDataUrl?;
-    private _mid?;
-    private _uname?;
+    private _qrDataUrl;
+    private _mid;
+    private _uname;
+    private isOnline;
+    private cookiePath;
     private abortController;
+    private rpmLisfoxTimestamps;
+    private rpmLocalTimestamps;
+    private readonly MAX_RPM_LISFOX;
+    private readonly MAX_RPM_LOCAL;
     constructor(ctx: Context, config: Config);
     private getStatus;
     private setStatus;
@@ -50,7 +56,6 @@ export declare class BilibiliAdapterService extends Service implements LfvsAdapt
         cookie: string;
         csrf: string;
     };
-    private fetchWebId;
     private saveCookie;
     private loadCookie;
     private loginByQRCode;
@@ -69,4 +74,5 @@ export declare class BilibiliAdapterService extends Service implements LfvsAdapt
         avatar?: string;
     }>>;
 }
+export declare const inject: string[];
 export declare const apply: (ctx: Context, config: Config) => void;

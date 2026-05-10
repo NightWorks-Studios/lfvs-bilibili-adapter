@@ -1,6 +1,7 @@
 import { Context, Service } from 'cordis'
 import z from 'schemastery'
 import {} from '@cordisjs/plugin-http'
+import {} from '@cordisjs/plugin-timer'
 import {} from '@cordisjs/plugin-webui'
 import { createHash } from 'crypto'
 import qrcode from 'qrcode-terminal'
@@ -39,6 +40,7 @@ const QRCODE_POLL_API = 'https://passport.bilibili.com/x/passport-login/web/qrco
 export class BilibiliAdapterService extends Service implements LfvsAdapter {
   static inject = {
     http: { required: true },
+    timer: { required: true },
     'lfvs.core': { required: true },
     logger: { required: true },
     webui: { required: false }
@@ -49,16 +51,19 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
   private csrf: string = ''
   private wbiKeys: { img_key: string; sub_key: string } | null = null
   private wbiKeysLastUpdate: Date | null = null
-  private cookiePath: string
-  private isOnline: boolean = false
-
-  // WebUI 状态
   private _status: 'offline' | 'waiting_qr' | 'logged_in' = 'offline'
-  private _qrDataUrl?: string
-  private _mid?: number
-  private _uname?: string
-
+  private _qrDataUrl: string = ''
+  private _mid: number = 0
+  private _uname: string = ''
+  private isOnline: boolean = false
+  private cookiePath: string
   private abortController: AbortController
+
+  // RPM 滑动窗口计数器
+  private rpmLisfoxTimestamps: number[] = []
+  private rpmLocalTimestamps: number[] = []
+  private readonly MAX_RPM_LISFOX = 10000
+  private readonly MAX_RPM_LOCAL = 120
 
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'lfvs.bilibili')
@@ -90,11 +95,22 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
   }
 
   private getStatus() {
+    const now = Date.now()
+    this.rpmLisfoxTimestamps = this.rpmLisfoxTimestamps.filter(t => now - t < 60000)
+    this.rpmLocalTimestamps = this.rpmLocalTimestamps.filter(t => now - t < 60000)
+    const rpmLisfox = this.rpmLisfoxTimestamps.length
+    const rpmLocal = this.rpmLocalTimestamps.length
     return {
       status: this._status,
       qrcode: this._qrDataUrl,
       mid: this._mid,
-      uname: this._uname
+      uname: this._uname,
+      rpmLisfox,
+      rpmLocal,
+      maxRpmLisfox: this.MAX_RPM_LISFOX,
+      maxRpmLocal: this.MAX_RPM_LOCAL,
+      loadLisfox: rpmLisfox / this.MAX_RPM_LISFOX,
+      loadLocal: rpmLocal / this.MAX_RPM_LOCAL
     }
   }
 
@@ -213,24 +229,24 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
         return reject(new Error('Context disposed'))
       }
 
-      const interval = setInterval(async () => {
+      const dispose = this.ctx.timer.setInterval(async () => {
         try {
           const pollResp = await this.ctx.http(QRCODE_POLL_API, { params: { qrcode_key: gen.data.qrcode_key } })
           const pollJson = await pollResp.json()
           const pollData = pollJson.data
           if (pollData && pollData.code === 0) {
-            clearInterval(interval)
+            dispose()
             await this.saveCookie(pollResp.headers)
             this.abortController.signal.removeEventListener('abort', abortHandler)
             resolve()
           } else if (pollData && pollData.code === 86038) {
-            clearInterval(interval)
+            dispose()
             this.setStatus('offline')
             this.abortController.signal.removeEventListener('abort', abortHandler)
             reject(new Error('二维码已失效'))
           }
         } catch (e) {
-          clearInterval(interval)
+          dispose()
           this.setStatus('offline')
           this.abortController.signal.removeEventListener('abort', abortHandler)
           reject(e)
@@ -238,7 +254,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
       }, 3000)
 
       const abortHandler = () => {
-        clearInterval(interval)
+        dispose()
         reject(new Error('Context disposed'))
       }
 
@@ -294,6 +310,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
 
     if (this.config.useLisfoxProxy) {
       try {
+        this.rpmLisfoxTimestamps.push(Date.now())
         const lisfox = await this.ctx.http.post(LISFOX_PROXY_VIEW_API, { bvid: videoId }, { timeout: 5000 })
         if (lisfox?.response) {
           const data = this.mapBilibiliViewData(lisfox.response)
@@ -308,6 +325,7 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
 
     // 直连兜底
     try {
+      this.rpmLocalTimestamps.push(Date.now())
       const direct = await this.ctx.http.get(targetUrl, {
         headers: { Cookie: this.cookie, 'User-Agent': 'Mozilla/5.0' }
       })
@@ -404,6 +422,8 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
     }
   }
 }
+
+export const inject = ['http']
 
 export const apply = (ctx: Context, config: Config) => {
   ctx.plugin(BilibiliAdapterService, config)

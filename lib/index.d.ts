@@ -1,11 +1,6 @@
 import { Context, Service } from 'cordis';
 import z from 'schemastery';
 import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from 'lfvs-core';
-declare module '@cordisjs/plugin-webui' {
-    interface Events {
-        'bilibili/status'(): any;
-    }
-}
 export interface Config {
     useLisfoxProxy: boolean;
 }

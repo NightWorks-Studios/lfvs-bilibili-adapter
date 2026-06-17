@@ -11,11 +11,7 @@ import path from 'path'
 import { generateDmParams } from './utils'
 import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from 'lfvs-core'
 
-declare module '@cordisjs/plugin-webui' {
-  interface Events {
-    'bilibili/status'(): any
-  }
-}
+
 
 export interface Config {
   useLisfoxProxy: boolean
@@ -78,12 +74,13 @@ export class BilibiliAdapterService extends Service implements LfvsAdapter {
 
     ctx.inject(['webui'], (ctx) => {
       ctx.webui.addEntry({
-        path: 'lfvs-bilibili-adapter',
-        base: import.meta.url,
-        dev: '../client/index.ts',
-        prod: '../dist/manifest.json'
+        modulePath: 'lfvs-bilibili-adapter',
+        baseUrl: import.meta.url,
+        source: '../client/index.ts',
+        manifest: '../dist/manifest.json'
+      }, {
+        'bilibili/status': () => this.getStatus()
       })
-      ctx.webui.addListener('bilibili/status', () => this.getStatus())
     })
 
     Promise.resolve().then(() => {

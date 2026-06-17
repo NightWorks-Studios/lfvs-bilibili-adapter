@@ -20,9 +20,10 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { useContext, send } from '@cordisjs/client'
+import { useContext, useRpc } from '@cordisjs/client'
 
 const ctx = useContext()
+const rpc = useRpc<any>()
 
 const isCurrentPlugin = computed(() => {
   const entry = ctx.manager?.currentEntry
@@ -56,8 +57,7 @@ const statusText = computed(() => {
 
 onMounted(() => {
   if (isCurrentPlugin.value) {
-    // 初始获取状态
-    send('bilibili/status').then((data: BilibiliStatus) => {
+    rpc.value?.['bilibili/status']?.().then((data: BilibiliStatus) => {
       if (data) statusData.value = data
     }).catch(() => {})
   }
